@@ -148,11 +148,15 @@
         <span id="claim-status" class="muted"></span>
       </div>
       <div id="claim-result-wrap" class="hidden" style="margin-top:16px">
-        <p class="ok">✓ Signed. Copy this JSON and paste it to the instructor:</p>
-        <textarea id="claim-result" class="result" readonly></textarea>
-        <div class="row">
-          <button class="secondary" onclick="copyField('claim-result')">Copy to clipboard</button>
-        </div>
+        <p class="ok">✓ Signed.</p>
+        <p id="claim-submit-status" style="margin: 4px 0 12px; font-size: 14px;"></p>
+        <details>
+          <summary class="muted" style="cursor:pointer">Signed JSON (only needed if auto-submit failed)</summary>
+          <textarea id="claim-result" class="result" readonly style="margin-top:8px"></textarea>
+          <div class="row">
+            <button class="secondary" onclick="copyField('claim-result')">Copy to clipboard</button>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -175,11 +179,15 @@
         <span id="alloc-status" class="muted"></span>
       </div>
       <div id="alloc-result-wrap" class="hidden" style="margin-top:16px">
-        <p class="ok">✓ Signed. Copy this JSON and paste it to the instructor:</p>
-        <textarea id="alloc-result" class="result" readonly></textarea>
-        <div class="row">
-          <button class="secondary" onclick="copyField('alloc-result')">Copy to clipboard</button>
-        </div>
+        <p class="ok">✓ Signed.</p>
+        <p id="alloc-submit-status" style="margin: 4px 0 12px; font-size: 14px;"></p>
+        <details>
+          <summary class="muted" style="cursor:pointer">Signed JSON (only needed if auto-submit failed)</summary>
+          <textarea id="alloc-result" class="result" readonly style="margin-top:8px"></textarea>
+          <div class="row">
+            <button class="secondary" onclick="copyField('alloc-result')">Copy to clipboard</button>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -188,6 +196,7 @@
 <script>
   const SEPOLIA_CHAIN_ID = 11155111n;
   const GGU_CONTRACT = "0x56f01E82bA31F8F585C0dF3d1A67B7DF4F325a2f";
+  const WORKER_URL = "https://ggu-signatures-worker.josephhirsh.workers.dev";
 
   const CLAIM_DOMAIN = {
     name: "GGU Classroom Claim",
@@ -352,6 +361,7 @@
       document.getElementById("claim-result").value = JSON.stringify(out, null, 2);
       document.getElementById("claim-result-wrap").classList.remove("hidden");
       document.getElementById("claim-status").textContent = "";
+      submitPayload(out, "claim-submit-status");
     } catch (e) {
       document.getElementById("claim-status").textContent = "Cancelled or failed: " + (e.message || e);
     } finally {
@@ -482,6 +492,7 @@
       document.getElementById("alloc-result").value = JSON.stringify(out, null, 2);
       document.getElementById("alloc-result-wrap").classList.remove("hidden");
       document.getElementById("alloc-status").textContent = "";
+      submitPayload(out, "alloc-submit-status");
     } catch (e) {
       document.getElementById("alloc-status").textContent = "Cancelled or failed: " + (e.message || e);
       validateAllocation();
@@ -492,6 +503,31 @@
     const el = document.getElementById(id);
     el.select();
     navigator.clipboard.writeText(el.value);
+  }
+
+  async function submitPayload(payload, statusId) {
+    const el = document.getElementById(statusId);
+    if (!el) return;
+    el.textContent = "submitting to instructor…";
+    el.style.color = "#666";
+    try {
+      const r = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (r.ok) {
+        el.textContent = "✓ Submitted automatically. You're done — no need to paste anything.";
+        el.style.color = "#0f5a0f";
+      } else {
+        el.textContent = "⚠ Auto-submit failed (" + (body.error || r.status) + "). Copy the JSON above and send it to the instructor manually.";
+        el.style.color = "#c5283d";
+      }
+    } catch (e) {
+      el.textContent = "⚠ Auto-submit failed (" + (e.message || e) + "). Copy the JSON above and send it to the instructor manually.";
+      el.style.color = "#c5283d";
+    }
   }
 
   window.addEventListener("load", async () => {
