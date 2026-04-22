@@ -8,4 +8,4 @@ Hosted via GitHub Pages for a stable URL across classes.
 
 - GGU contract: `0x56f01E82bA31F8F585C0dF3d1A67B7DF4F325a2f` (Sepolia)
 - Chain: Sepolia (chainId 11155111)
-- No backend. No analytics. ethers.js v6 from jsDelivr; MetaMask in-browser.
+- No analytics. ethers.js v6 from jsDelivr; MetaMask in-browser.
