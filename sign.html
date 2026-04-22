@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GGU Classroom — Claim & Allocate</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --accent: #3b82f6;
+      --accent-dark: #1d4ed8;
+      --ok: #0f5a0f;
+      --err: #c5283d;
+      --muted: #666;
+      --border: #e0e0e0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto 80px;
+      padding: 0 24px;
+      color: #1a1a1a;
+      line-height: 1.55;
+      font-size: 16px;
+    }
+    h1 { font-size: 28px; margin-bottom: 6px; }
+    .subtitle { color: var(--muted); margin-top: 0; margin-bottom: 32px; }
+    h2 { font-size: 18px; margin-top: 36px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .status {
+      padding: 14px 18px;
+      border-radius: 6px;
+      background: #f4f4f4;
+      font-size: 14px;
+      margin: 16px 0 24px;
+      font-family: "SF Mono", Monaco, monospace;
+    }
+    .status.ok { background: #e8f5e8; color: var(--ok); }
+    .status.err { background: #fde0e4; color: var(--err); }
+    .status.warn { background: #fff7e6; color: #6b4800; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    button:hover { background: var(--accent-dark); }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    button.secondary { background: #6b7280; }
+    button.secondary:hover { background: #4b5563; }
+    .card {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin: 20px 0;
+    }
+    .hidden { display: none; }
+    input[type=text], input[type=number] {
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: "SF Mono", Monaco, monospace;
+    }
+    input[type=number] { width: 80px; }
+    input[type=text] { width: 440px; max-width: 100%; }
+    input.invalid { border-color: var(--err); background: #fff1f1; }
+    .recipient-row {
+      display: grid;
+      grid-template-columns: 36px 1fr 90px;
+      gap: 8px;
+      align-items: center;
+      margin: 6px 0;
+    }
+    .recipient-idx { color: var(--muted); font-size: 13px; text-align: right; padding-right: 8px; }
+    pre.payload {
+      background: #1a1a1a;
+      color: #e0e0e0;
+      padding: 12px 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 1.4;
+      max-height: 300px;
+      font-family: "SF Mono", Monaco, monospace;
+    }
+    textarea.result {
+      width: 100%;
+      min-height: 120px;
+      font-family: "SF Mono", Monaco, monospace;
+      font-size: 12px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .muted { color: var(--muted); font-size: 14px; }
+    .err { color: var(--err); font-size: 14px; }
+    .ok { color: var(--ok); font-size: 14px; font-weight: 600; }
+    .row { display: flex; gap: 10px; align-items: center; margin: 10px 0; }
+    .pill {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>GGU Classroom — Claim &amp; Allocate</h1>
+  <p class="subtitle">Sign to claim your wallet for credit, or (if you hold the golden token) allocate its 100 bonus points.</p>
+
+  <div id="status" class="status">Checking MetaMask…</div>
+
+  <div id="connect-panel" class="hidden">
+    <button id="connect-btn">Connect MetaMask</button>
+  </div>
+
+  <div id="switch-panel" class="hidden">
+    <button id="switch-btn">Switch to Sepolia</button>
+  </div>
+
+  <!-- Claim section -->
+  <div id="app" class="hidden">
+
+    <h2>Part 1 — Claim your wallet</h2>
+    <div class="card">
+      <p>Sign to prove you control this wallet. Your on-chain GGU balance at game-end becomes your regular credit.</p>
+
+      <p><strong>Your name</strong> (goes into the signed message so the instructor can map this wallet to you):</p>
+      <div class="row">
+        <input type="text" id="claim-name" placeholder="First Last" maxlength="64" style="width: 320px" />
+        <span id="claim-name-status" class="muted"></span>
+      </div>
+
+      <p style="margin-top:16px"><strong>You are about to sign this message:</strong></p>
+      <pre id="claim-preview" class="payload"></pre>
+      <div class="row">
+        <button id="sign-claim-btn" disabled>Sign Claim</button>
+        <span id="claim-status" class="muted"></span>
+      </div>
+      <div id="claim-result-wrap" class="hidden" style="margin-top:16px">
+        <p class="ok">✓ Signed. Copy this JSON and paste it to the instructor:</p>
+        <textarea id="claim-result" class="result" readonly></textarea>
+        <div class="row">
+          <button class="secondary" onclick="copyField('claim-result')">Copy to clipboard</button>
+        </div>
+      </div>
+    </div>
+
+    <h2>Part 2 — Allocate 100 golden-token points</h2>
+    <div class="card">
+      <p>Only the student holding the golden token at game end should use this section. Anyone can sign, but only the real holder's signature counts.</p>
+
+      <p><strong>Recipients</strong> — up to 5 addresses, integer weights summing to <strong>100</strong>:</p>
+      <div id="recipients"></div>
+      <div class="row">
+        <button class="secondary" id="add-recipient-btn" type="button">+ Add recipient</button>
+        <span id="alloc-sum" class="muted">Sum: 0 / 100</span>
+      </div>
+      <div id="alloc-validation" class="err" style="margin-top:6px"></div>
+
+      <p style="margin-top:18px"><strong>You are about to sign this message:</strong></p>
+      <pre id="alloc-preview" class="payload">Fill in recipients and weights above.</pre>
+      <div class="row">
+        <button id="sign-alloc-btn" disabled>Sign Allocation</button>
+        <span id="alloc-status" class="muted"></span>
+      </div>
+      <div id="alloc-result-wrap" class="hidden" style="margin-top:16px">
+        <p class="ok">✓ Signed. Copy this JSON and paste it to the instructor:</p>
+        <textarea id="alloc-result" class="result" readonly></textarea>
+        <div class="row">
+          <button class="secondary" onclick="copyField('alloc-result')">Copy to clipboard</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  const SEPOLIA_CHAIN_ID = 11155111n;
+  const GGU_CONTRACT = "0x56f01E82bA31F8F585C0dF3d1A67B7DF4F325a2f";
+
+  const CLAIM_DOMAIN = {
+    name: "GGU Classroom Claim",
+    version: "1",
+    chainId: Number(SEPOLIA_CHAIN_ID),
+    verifyingContract: GGU_CONTRACT,
+  };
+  const CLAIM_TYPES = {
+    Claim: [
+      { name: "wallet", type: "address" },
+      { name: "name", type: "string" },
+      { name: "message", type: "string" },
+      { name: "timestamp", type: "uint256" },
+    ],
+  };
+  const CLAIM_MESSAGE_TEXT = "I claim the GGU held by this wallet for credit in the GradeGoUp classroom game.";
+
+  const ALLOC_DOMAIN = {
+    name: "GGU Classroom Allocation",
+    version: "1",
+    chainId: Number(SEPOLIA_CHAIN_ID),
+    verifyingContract: GGU_CONTRACT,
+  };
+  const ALLOC_TYPES = {
+    Allocation: [
+      { name: "allocator", type: "address" },
+      { name: "recipients", type: "address[]" },
+      { name: "weights", type: "uint8[]" },
+      { name: "message", type: "string" },
+      { name: "timestamp", type: "uint256" },
+    ],
+  };
+  const ALLOC_MESSAGE_TEXT = "I allocate 100 GGU golden-token credit points.";
+
+  let provider = null;
+  let signer = null;
+  let userAddress = null;
+
+  function setStatus(text, cls) {
+    const el = document.getElementById("status");
+    el.textContent = text;
+    el.className = "status" + (cls ? " " + cls : "");
+  }
+
+  async function detect() {
+    if (!window.ethereum) {
+      setStatus("MetaMask not detected. Install it from metamask.io and reload.", "err");
+      return false;
+    }
+    provider = new ethers.BrowserProvider(window.ethereum);
+    return true;
+  }
+
+  async function switchToSepolia() {
+    console.log("[sign.html] switchToSepolia() called");
+    setStatus("Asking MetaMask to switch to Sepolia…");
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0xaa36a7" }],  // 11155111
+      });
+      // chainChanged listener will reload the page.
+    } catch (e) {
+      console.error("[sign.html] switch error:", e);
+      if (e.code === 4902) {
+        // Chain not added; try to add it.
+        try {
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: "0xaa36a7",
+              chainName: "Sepolia",
+              nativeCurrency: { name: "Sepolia ETH", symbol: "SEP", decimals: 18 },
+              rpcUrls: ["https://rpc.sepolia.org"],
+              blockExplorerUrls: ["https://sepolia.etherscan.io"],
+            }],
+          });
+        } catch (e2) {
+          setStatus(`Add-chain failed: ${e2.message || e2}`, "err");
+        }
+      } else {
+        setStatus(`Switch failed: ${e.message || e}`, "err");
+      }
+    }
+  }
+
+  async function connect() {
+    console.log("[sign.html] connect() called");
+    setStatus("Opening MetaMask…");
+    try {
+      if (!window.ethereum) {
+        throw new Error("window.ethereum missing");
+      }
+      // Use the raw MetaMask request API for maximum compatibility.
+      const accts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      console.log("[sign.html] accounts:", accts);
+      if (!accts || accts.length === 0) {
+        throw new Error("no accounts returned from MetaMask");
+      }
+      userAddress = ethers.getAddress(accts[0]);
+      signer = await provider.getSigner();
+      const network = await provider.getNetwork();
+      console.log("[sign.html] network chainId:", network.chainId);
+      if (network.chainId !== SEPOLIA_CHAIN_ID) {
+        setStatus(`Connected on wrong chain (chainId ${network.chainId}). Click "Switch to Sepolia".`, "warn");
+        document.getElementById("app").classList.add("hidden");
+        document.getElementById("connect-panel").classList.add("hidden");
+        document.getElementById("switch-panel").classList.remove("hidden");
+        return;
+      }
+      setStatus(`Connected: ${userAddress} (Sepolia ✓)`, "ok");
+      document.getElementById("connect-panel").classList.add("hidden");
+      document.getElementById("app").classList.remove("hidden");
+      renderClaimPreview();
+      ensureRecipients(3);
+      renderAllocPreview();
+    } catch (e) {
+      console.error("[sign.html] connect() error:", e);
+      setStatus(`Connection failed: ${e.message || e}`, "err");
+    }
+  }
+
+  function renderClaimPreview() {
+    const name = (document.getElementById("claim-name")?.value || "").trim();
+    const msg = {
+      wallet: userAddress,
+      name: name,
+      message: CLAIM_MESSAGE_TEXT,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    const payload = { domain: CLAIM_DOMAIN, types: CLAIM_TYPES, primaryType: "Claim", message: msg };
+    document.getElementById("claim-preview").textContent = JSON.stringify(payload, null, 2);
+    const ready = name.length > 0;
+    document.getElementById("sign-claim-btn").disabled = !ready;
+    document.getElementById("claim-name-status").textContent = ready ? "" : "enter a name to enable signing";
+  }
+
+  async function signClaim() {
+    try {
+      const name = (document.getElementById("claim-name").value || "").trim();
+      if (!name) {
+        document.getElementById("claim-status").textContent = "enter your name first";
+        return;
+      }
+      document.getElementById("sign-claim-btn").disabled = true;
+      document.getElementById("claim-status").textContent = "waiting for MetaMask…";
+      const message = {
+        wallet: userAddress,
+        name: name,
+        message: CLAIM_MESSAGE_TEXT,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      const sig = await signer.signTypedData(CLAIM_DOMAIN, CLAIM_TYPES, message);
+      const out = {
+        type: "claim",
+        domain: CLAIM_DOMAIN,
+        types: CLAIM_TYPES,
+        primaryType: "Claim",
+        message: message,
+        signature: sig,
+      };
+      document.getElementById("claim-result").value = JSON.stringify(out, null, 2);
+      document.getElementById("claim-result-wrap").classList.remove("hidden");
+      document.getElementById("claim-status").textContent = "";
+    } catch (e) {
+      document.getElementById("claim-status").textContent = "Cancelled or failed: " + (e.message || e);
+    } finally {
+      document.getElementById("sign-claim-btn").disabled = false;
+    }
+  }
+
+  function ensureRecipients(n) {
+    const box = document.getElementById("recipients");
+    box.innerHTML = "";
+    for (let i = 0; i < n; i++) addRecipientRow();
+  }
+  function addRecipientRow() {
+    const box = document.getElementById("recipients");
+    const rows = box.querySelectorAll(".recipient-row");
+    if (rows.length >= 5) return;
+    const idx = rows.length + 1;
+    const row = document.createElement("div");
+    row.className = "recipient-row";
+    row.innerHTML = `
+      <span class="recipient-idx">#${idx}</span>
+      <input type="text" class="addr" placeholder="0x… recipient address" />
+      <input type="number" class="weight" placeholder="weight" min="0" max="100" step="1" />
+    `;
+    box.appendChild(row);
+    row.querySelectorAll("input").forEach(el => el.addEventListener("input", validateAllocation));
+  }
+
+  function validateAllocation() {
+    const rows = document.querySelectorAll(".recipient-row");
+    let addrs = [];
+    let weights = [];
+    let errors = [];
+    let sum = 0;
+    rows.forEach((r, i) => {
+      const aEl = r.querySelector(".addr");
+      const wEl = r.querySelector(".weight");
+      const a = aEl.value.trim();
+      const w = wEl.value.trim();
+      const hasAny = a || w;
+      if (!hasAny) {
+        aEl.classList.remove("invalid"); wEl.classList.remove("invalid");
+        return;
+      }
+      if (!ethers.isAddress(a)) {
+        aEl.classList.add("invalid");
+        errors.push(`row #${i+1}: invalid address`);
+      } else {
+        aEl.classList.remove("invalid");
+      }
+      const wn = Number(w);
+      if (!Number.isInteger(wn) || wn < 1 || wn > 100) {
+        wEl.classList.add("invalid");
+        errors.push(`row #${i+1}: weight must be integer 1–100`);
+      } else {
+        wEl.classList.remove("invalid");
+      }
+      addrs.push(a);
+      weights.push(wn);
+      if (Number.isFinite(wn)) sum += wn;
+    });
+    document.getElementById("alloc-sum").textContent = `Sum: ${sum} / 100`;
+
+    // Dedupe check
+    const lowers = addrs.map(x => (x||"").toLowerCase()).filter(Boolean);
+    if (new Set(lowers).size !== lowers.length) {
+      errors.push("duplicate recipient address");
+    }
+
+    const validAddrs = addrs.filter(a => a && ethers.isAddress(a));
+    const validWeights = weights.filter(w => Number.isInteger(w) && w >= 1 && w <= 100);
+    const ready = validAddrs.length === validWeights.length &&
+                  validAddrs.length >= 1 &&
+                  validAddrs.length === addrs.length && addrs.length > 0 &&
+                  sum === 100 &&
+                  errors.length === 0;
+    if (!ready && addrs.length > 0 && sum !== 100) errors.push(`weights must sum to exactly 100 (current: ${sum})`);
+
+    document.getElementById("alloc-validation").textContent = errors.join(" · ");
+    document.getElementById("sign-alloc-btn").disabled = !ready;
+    renderAllocPreview(ready ? { addrs, weights } : null);
+  }
+
+  function renderAllocPreview(parsed) {
+    const pre = document.getElementById("alloc-preview");
+    if (!parsed) {
+      pre.textContent = "Fill in recipients and weights above (weights must sum to exactly 100).";
+      return;
+    }
+    const msg = {
+      allocator: userAddress,
+      recipients: parsed.addrs.map(a => ethers.getAddress(a)),
+      weights: parsed.weights,
+      message: ALLOC_MESSAGE_TEXT,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    pre.textContent = JSON.stringify({ domain: ALLOC_DOMAIN, types: ALLOC_TYPES, primaryType: "Allocation", message: msg }, null, 2);
+  }
+
+  async function signAllocation() {
+    try {
+      document.getElementById("sign-alloc-btn").disabled = true;
+      document.getElementById("alloc-status").textContent = "waiting for MetaMask…";
+      const rows = document.querySelectorAll(".recipient-row");
+      const addrs = [];
+      const weights = [];
+      rows.forEach(r => {
+        const a = r.querySelector(".addr").value.trim();
+        const w = Number(r.querySelector(".weight").value.trim());
+        if (a) { addrs.push(ethers.getAddress(a)); weights.push(w); }
+      });
+      const message = {
+        allocator: userAddress,
+        recipients: addrs,
+        weights: weights,
+        message: ALLOC_MESSAGE_TEXT,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      const sig = await signer.signTypedData(ALLOC_DOMAIN, ALLOC_TYPES, message);
+      const out = {
+        type: "allocation",
+        domain: ALLOC_DOMAIN,
+        types: ALLOC_TYPES,
+        primaryType: "Allocation",
+        message: message,
+        signature: sig,
+      };
+      document.getElementById("alloc-result").value = JSON.stringify(out, null, 2);
+      document.getElementById("alloc-result-wrap").classList.remove("hidden");
+      document.getElementById("alloc-status").textContent = "";
+    } catch (e) {
+      document.getElementById("alloc-status").textContent = "Cancelled or failed: " + (e.message || e);
+      validateAllocation();
+    }
+  }
+
+  function copyField(id) {
+    const el = document.getElementById(id);
+    el.select();
+    navigator.clipboard.writeText(el.value);
+  }
+
+  window.addEventListener("load", async () => {
+    console.log("[sign.html] load handler running");
+    console.log("[sign.html] window.ethereum:", !!window.ethereum, "ethers:", typeof ethers);
+
+    const btn = document.getElementById("connect-btn");
+    btn.addEventListener("click", connect);
+    console.log("[sign.html] connect-btn listener attached");
+
+    document.getElementById("switch-btn").addEventListener("click", switchToSepolia);
+    document.getElementById("sign-claim-btn").addEventListener("click", signClaim);
+    document.getElementById("claim-name").addEventListener("input", renderClaimPreview);
+    document.getElementById("sign-alloc-btn").addEventListener("click", signAllocation);
+    document.getElementById("add-recipient-btn").addEventListener("click", () => { addRecipientRow(); validateAllocation(); });
+
+    if (!(await detect())) return;
+    setStatus("Click Connect to authorize MetaMask.");
+    document.getElementById("connect-panel").classList.remove("hidden");
+
+    if (window.ethereum.on) {
+      window.ethereum.on("accountsChanged", () => window.location.reload());
+      window.ethereum.on("chainChanged", () => window.location.reload());
+    }
+  });
+</script>
+
+</body>
+</html>
